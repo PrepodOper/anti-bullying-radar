@@ -1,0 +1,51 @@
+services:
+  backend:
+    build: .
+    container_name: radar-backend
+    env_file: .env
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./radar.db
+      - SECRET_KEY=${SECRET_KEY}
+      - BACKEND_PORT=8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./radar.db:/app/radar.db
+      - ./miniapp:/app/miniapp
+    command: uvicorn backend.app:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  bot:
+    build: .
+    container_name: radar-bot
+    env_file: .env
+    environment:
+      - BACKEND_URL=http://backend:8000
+      - BOT_PORT=8001
+      - SECRET_KEY=${SECRET_KEY}
+    ports:
+      - "8001:8001"
+    depends_on:
+      backend:
+        condition: service_healthy
+    command: uvicorn bot.bot_max:app --host 0.0.0.0 --port 8001 --reload
+
+  # Для прода — Postgres (раскомментируйте и смените DATABASE_URL в .env)
+  # db:
+  #   image: postgres:16-alpine
+  #   container_name: radar-db
+  #   environment:
+  #     POSTGRES_USER: radar
+  #     POSTGRES_PASSWORD: radar
+  #     POSTGRES_DB: radar
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data
+
+# volumes:
+#   pgdata:

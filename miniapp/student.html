@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Антибуллинг-радар — Дневник настроения</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<header>
+  <div class="logo">M</div>
+  <div>
+    <div style="font-weight:750">Антибуллинг-радар</div>
+    <div style="font-size:12px;opacity:.9">мини-приложение · ученик</div>
+  </div>
+  <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+    <span class="badge ok">🔒 Конфиденциально</span>
+    <a href="./psych.html" style="color:#fff;text-decoration:underline;font-size:13px">Психологу →</a>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="card" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+    <div style="flex:1;min-width:240px">
+      <div class="h1">Дневник настроения</div>
+      <div class="muted">Отмечай каждый день (5 уровней). История видна только тебе. Психолог видит лишь параллель при SOS.</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input id="uid" placeholder="MAX user id" value="test_user_1" style="width:160px">
+      <select id="cg" style="width:150px">
+        <option>8-параллель</option><option>9-параллель</option><option>10-параллель</option><option>11-параллель</option>
+        <option>8А</option><option>9Б</option>
+      </select>
+      <button class="btn secondary" onclick="loadHistory()">Обновить</button>
+    </div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="h1" style="margin-bottom:8px">Как ты сегодня? <span class="pill">1 — очень плохо · 5 — отлично</span></div>
+      <div class="mood-row" id="moodRow">
+        <div class="mood" data-v="1"><span>😢</span><b>1</b>Очень плохо</div>
+        <div class="mood" data-v="2"><span>😕</span><b>2</b>Плохо</div>
+        <div class="mood active" data-v="3"><span>😐</span><b>3</b>Нормально</div>
+        <div class="mood" data-v="4"><span>🙂</span><b>4</b>Хорошо</div>
+        <div class="mood" data-v="5"><span>😄</span><b>5</b>Отлично</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button class="btn" onclick="saveMood()">Сохранить отметку</button>
+        <button class="btn danger" onclick="sendSOS()">🆘 SOS — позвать психолога</button>
+      </div>
+      <div id="saveMsg" class="notice info" style="display:none;margin-top:10px"></div>
+      <div class="notice warn" style="margin-top:10px">
+        🔒 Психолог и одноклассники не узнают, что это ты, пока сам не решишь раскрыться. Хранится только обезличенный код (HMAC) и параллель.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="h1">История и динамика</div>
+      <div class="muted" style="margin:6px 0 10px">Триггер «3 дня ухудшения» предложит поговорить с психологом анонимно.</div>
+      <div class="chartWrap"><canvas id="chart" width="600" height="220"></canvas></div>
+      <div id="triggerBox" class="notice" style="display:none;margin-top:10px"></div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn secondary" onclick="sendSOS('3day_decline')">Поговорить с психологом</button>
+        <button class="btn secondary" onclick="document.getElementById('triggerBox').style.display='none'">Пока не готов</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div class="h1">Последние отметки</div>
+      <span id="countBadge" class="badge">0 записей</span>
+      <span id="avgBadge" class="badge">среднее —</span>
+      <button class="btn secondary" style="margin-left:auto" onclick="toggleTable()">Показать таблицу</button>
+    </div>
+    <div id="tableWrap" style="display:none;margin-top:10px;overflow:auto">
+      <table>
+        <thead><tr><th>Дата</th><th>Уровень</th><th>Эмодзи</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="h1">💬 Свободный диалог (проверка маркеров риска)</div>
+    <div class="muted">Напиши, что беспокоит. Бот проверит маркеры острого риска (без диагнозов) и предложит Уровень 2.</div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <input id="dialogText" placeholder="Например: меня травят в классе, не хочу идти в школу...">
+      <button class="btn" onclick="sendDialog()">Отправить</button>
+    </div>
+    <div id="dialogReply" class="notice info" style="display:none;margin-top:10px"></div>
+    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+      <button class="btn secondary" onclick="fillDialog('не хочу жить, никому не нужен')">Тест: «не хочу жить»</button>
+      <button class="btn secondary" onclick="fillDialog('меня избивают каждый день')">Тест: «избивают»</button>
+      <button class="btn secondary" onclick="fillDialog('просто устал, хочу отдохнуть')">Тест: нейтрально</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="h1">📚 База знаний</div>
+    <div class="grid grid-3" style="margin-top:10px">
+      <div class="notice info"><b>Что делать при буллинге?</b><br>1. Сохрани доказательства (скрины). 2. Обратись к взрослому, которому доверяешь. 3. Нажми SOS — психолог рядом.</div>
+      <div class="notice info"><b>Техники самопомощи</b><br>Дыхание 4-7-8, прогулка 10 минут, разговор с другом, дневник настроения — отмечай каждый день.</div>
+      <div class="notice info"><b>Горячие линии</b><br>8-800-2000-122 (детский телефон доверия, 24/7) <br> 8-800-333-44-34 (экстренная помощь)</div>
+    </div>
+  </div>
+</div>
+
+<script src="./app.js"></script>
+<script>
+let selected = 3;
+document.querySelectorAll('.mood').forEach(el=>{
+  el.addEventListener('click',()=>{
+    document.querySelectorAll('.mood').forEach(x=>x.classList.remove('active'));
+    el.classList.add('active');
+    selected = parseInt(el.dataset.v);
+  });
+});
+function fillDialog(t){ document.getElementById('dialogText').value=t; }
+
+async function saveMood(){
+  const uid=document.getElementById('uid').value.trim();
+  const cg=document.getElementById('cg').value;
+  if(!uid) return alert('Укажи MAX user id');
+  const r = await fetch((window.BACKEND||'http://localhost:8000') + '/api/mood', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({max_user_id: uid, mood_level: selected, class_group: cg})
+  }).then(r=>r.json());
+  const box=document.getElementById('saveMsg');
+  box.style.display='block';
+  box.textContent = r.message || JSON.stringify(r);
+  if(r.trigger_3day){
+    box.className='notice warn';
+    box.textContent = '⚠️ ' + r.message + ' (создан SOS #'+r.sos_event_id+')';
+  } else {
+    box.className='notice info';
+  }
+  loadHistory();
+}
+async function sendSOS(type='manual_sos'){
+  const uid=document.getElementById('uid').value.trim();
+  const cg=document.getElementById('cg').value;
+  const r = await fetch((window.BACKEND||'http://localhost:8000') + '/api/sos', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({max_user_id: uid, trigger_type: type, risk_level: 'standard', class_group: cg})
+  }).then(r=>r.json());
+  const box=document.getElementById('saveMsg');
+  box.style.display='block';
+  box.className='notice info';
+  box.textContent = r.message + ' (event #' + r.event_id + ')';
+}
+async function sendDialog(){
+  const uid=document.getElementById('uid').value.trim();
+  const text=document.getElementById('dialogText').value.trim();
+  const cg=document.getElementById('cg').value;
+  if(!text) return;
+  const r = await fetch((window.BACKEND||'http://localhost:8000') + '/api/dialog', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({max_user_id: uid, text, class_group: cg})
+  }).then(r=>r.json());
+  const box=document.getElementById('dialogReply');
+  box.style.display='block';
+  if(r.risk_level==='elevated'){
+    box.className='notice warn';
+    box.innerHTML = '<b>'+r.reply+'</b><br><br>'+ (r.choices?r.choices.map(c=>'<button class="btn secondary" onclick="handleChoice(\''+c.action+'\')">'+c.label+'</button>').join(' '):'') + '<br><br><small>'+r.hotline+'</small>';
+  } else {
+    box.className='notice info';
+    box.textContent = r.reply;
+  }
+}
+async function handleChoice(action){
+  if(action==='hotline'){
+    const box=document.getElementById('dialogReply');
+    box.innerHTML += '<br><br>📞 <b>8-800-2000-122</b> — круглосуточно, бесплатно, анонимно.';
+  }
+  if(action==='disclose'){
+    const uid=document.getElementById('uid').value.trim();
+    const r=await fetch((window.BACKEND||'http://localhost:8000')+'/api/consent/disclose',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({max_user_id:uid,consent:true})}).then(r=>r.json());
+    alert(r.message);
+  }
+}
+function toggleTable(){
+  const w=document.getElementById('tableWrap');
+  w.style.display = w.style.display==='none'?'block':'none';
+}
+</script>
+</body>
+</html>

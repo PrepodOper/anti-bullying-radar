@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Антибуллинг-радар — Кабинет психолога</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<header>
+  <div class="logo">M</div>
+  <div>
+    <div style="font-weight:750">Антибуллинг-радар</div>
+    <div style="font-size:12px;opacity:.9">кабинет психолога · сводка</div>
+  </div>
+  <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+    <span class="badge warn">Только агрегаты · без pseudo_id</span>
+    <a href="./student.html" style="color:#fff;text-decoration:underline;font-size:13px">← Ученику</a>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div>
+        <div class="h1">Сводка по параллелям (за 7 дней)</div>
+        <div class="muted">Психолог видит только класс/параллель и факт обращения. Личность скрыта. Обновление — по кнопке.</div>
+      </div>
+      <button class="btn" style="margin-left:auto" onclick="loadReport()">Обновить сводку</button>
+      <span id="generated" class="badge"></span>
+    </div>
+    <div class="grid grid-3" id="kpis" style="margin-top:14px"></div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="h1">Динамика по классам</div>
+      <span class="badge">sos_count_week · avg_mood_trend · last_event_at</span>
+    </div>
+    <div style="overflow:auto;margin-top:10px">
+      <table>
+        <thead><tr><th>Параллель / класс</th><th>SOS за неделю</th><th>Нерешённых</th><th>Средний mood</th><th>Последнее событие</th><th>Тренд</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="notice info" style="margin-top:10px">
+      <b>Двухуровневая конфиденциальность:</b> Уровень 1 (бытовой) — только факт + параллель. Уровень 2 (острый риск) — бот предлагает горячую линию или добровольную передачу контакта. Без согласия личность не раскрывается. Автоудаление записей без раскрытия — через 30 дней (cron).
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="h1">Лента событий (последние 20)</div>
+      <button class="btn secondary" onclick="loadEvents()">Обновить ленту</button>
+    </div>
+    <div style="overflow:auto;margin-top:10px">
+      <table>
+        <thead><tr><th>#</th><th>Класс</th><th>Триггер</th><th>Риск</th><th>Время</th><th>Статус</th><th>Действие</th></tr></thead>
+        <tbody id="eventsBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="h1">Действия психолога</div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <input id="resolveId" placeholder="ID события" style="width:120px">
+      <button class="btn secondary" onclick="resolve()">Отметить обработанным</button>
+      <button class="btn secondary" onclick="cleanup()">Запустить автоудаление (30 дней)</button>
+      <a class="btn secondary" href="http://localhost:8000/docs" target="_blank">Открыть API docs</a>
+    </div>
+    <div id="actionMsg" class="notice" style="display:none;margin-top:10px"></div>
+    <p class="muted" style="margin-top:10px">Правовая база: ФЗ-152. На MVP — только тестовые/синтетические данные и тестовый аккаунт психолога. Реальной интеграции с ЕГИССО/службой нет.</p>
+  </div>
+</div>
+
+<script>
+const BACKEND = (window.BACKEND||'http://localhost:8000');
+async function loadReport(){
+  const r = await fetch(BACKEND+'/api/psych/report').then(r=>r.json());
+  document.getElementById('generated').textContent = 'Обновлено: ' + new Date(r.generated_at).toLocaleString('ru-RU');
+  const tbody=document.getElementById('tbody');
+  const kpis=document.getElementById('kpis');
+  tbody.innerHTML='';
+  // KPIs
+  const total = r.total_sos_week;
+  const maxRow = [...r.rows].sort((a,b)=>b.sos_count_week-a.sos_count_week)[0];
+  const lowMood = [...r.rows].filter(x=>x.avg_mood_trend!==null).sort((a,b)=>a.avg_mood_trend-b.avg_mood_trend)[0];
+  kpis.innerHTML = `
+    <div class="kpi card" style="box-shadow:none;border:1px solid #e6e8eb"><span>Всего SOS за неделю</span><b>${total}</b><span>по всем параллелям</span></div>
+    <div class="kpi card" style="box-shadow:none;border:1px solid #e6e8eb"><span>Пик обращений</span><b>${maxRow?maxRow.class_group+' · '+maxRow.sos_count_week:'—'}</b><span>где больше сигналов</span></div>
+    <div class="kpi card" style="box-shadow:none;border:1px solid #e6e8eb"><span>Самый низкий mood</span><b>${lowMood?lowMood.class_group+' · '+lowMood.avg_mood_trend:'—'}</b><span>средний уровень 1–5</span></div>
+  `;
+  r.rows.forEach(row=>{
+    const tr=document.createElement('tr');
+    const mood = row.avg_mood_trend ?? '—';
+    const moodCls = mood==='—'?'':(mood<2.5?'danger':mood<3.5?'warn':'ok');
+    const last = row.last_event_at ? new Date(row.last_event_at).toLocaleString('ru-RU') : '—';
+    const trend = row.sos_count_week>2 ? '<span class="badge danger">требует внимания</span>' : row.sos_count_week>0 ? '<span class="badge warn">наблюдение</span>' : '<span class="badge ok">стабильно</span>';
+    tr.innerHTML = `<td><b>${row.class_group}</b></td>
+      <td>${row.sos_count_week}</td>
+      <td>${row.unresolved_count}</td>
+      <td><span class="badge ${moodCls}">${mood}</span></td>
+      <td style="font-size:12px">${last}</td>
+      <td>${trend}</td>`;
+    tbody.appendChild(tr);
+  });
+  if(!r.rows.length){
+    tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:#6b7a90">Нет данных за неделю — пока тихо</td></tr>';
+  }
+}
+async function loadEvents(){
+  const rows = await fetch(BACKEND+'/api/psych/events?limit=20').then(r=>r.json());
+  const tbody=document.getElementById('eventsBody');
+  tbody.innerHTML='';
+  rows.forEach(e=>{
+    const tr=document.createElement('tr');
+    const risk = e.risk_level==='elevated' ? '<span class="badge danger">elevated</span>' : '<span class="badge ok">standard</span>';
+    const trig = e.trigger_type==='manual_sos'?'Ручной SOS':e.trigger_type==='3day_decline'?'3 дня ухудшения':'Маркер риска';
+    const status = e.resolved ? '<span class="badge ok">обработан</span>' : '<span class="badge warn">новый</span>';
+    tr.innerHTML = `<td>#${e.id}</td><td>${e.class_group}</td><td>${trig}</td><td>${risk}</td><td style="font-size:12px">${new Date(e.created_at).toLocaleString('ru-RU')}</td><td>${status}</td><td>${e.resolved?'—':'<button class="btn secondary" style="padding:4px 8px;font-size:12px" onclick="document.getElementById(\'resolveId\').value='+e.id+';resolve()">✓</button>'}</td>`;
+    tbody.appendChild(tr);
+  });
+  if(!rows.length) tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:#6b7a90">Событий нет</td></tr>';
+}
+async function resolve(){
+  const id=document.getElementById('resolveId').value.trim();
+  if(!id) return alert('Укажи ID');
+  const r=await fetch(BACKEND+'/api/psych/resolve/'+id,{method:'POST'}).then(r=>r.json());
+  const box=document.getElementById('actionMsg');
+  box.style.display='block'; box.className='notice info'; box.textContent = 'Событие #'+id+' отмечено обработанным.';
+  loadReport(); loadEvents();
+}
+async function cleanup(){
+  const r=await fetch(BACKEND+'/api/admin/cleanup?days=30',{method:'POST'}).then(r=>r.json());
+  const box=document.getElementById('actionMsg');
+  box.style.display='block'; box.className='notice info'; box.textContent = 'Автоудаление: удалено записей '+r.deleted+' (старше 30 дней, без раскрытия)';
+}
+loadReport(); loadEvents();
+</script>
+</body>
+</html>

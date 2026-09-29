@@ -1,0 +1,14 @@
+# Базовые зависимости — ставятся готовыми wheel на Linux/macOS/Windows
+# Для Windows на Python 3.13 используйте requirements-win.txt (без asyncpg, pydantic>=2.11)
+fastapi==0.110.2
+uvicorn[standard]==0.29.0
+sqlalchemy==2.0.30
+greenlet==3.0.3
+pydantic==2.11.7
+pydantic-settings==2.3.4
+python-dotenv==1.0.1
+python-multipart==0.0.9
+httpx==0.27.0
+aiosqlite==0.20.0
+# asyncpg — только для Postgres. На Windows требует компилятор, поэтому опционально:
+# asyncpg==0.29.0  — раскомментируйте если нужен Postgres (Linux/Docker)
